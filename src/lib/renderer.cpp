@@ -1,9 +1,12 @@
 #include <lib/renderer.h>
 #include <lib/window.h>
 #include <lib/gamepad.h>
+#include <lib/glfunctions.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
-#include <GL/gl.h>
+#ifndef __APPLE__
+# include <GL/gl.h>
+#endif
 
 namespace win32
 {
@@ -17,10 +20,59 @@ void GLAPIENTRY errorCallback(GLenum /*source*/, GLenum type, GLuint /*id*/, GLe
 }
 PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback;
 
+static const char g_blitVertexShader[] =
+"#version 410 core\n"
+"layout (location=0) in vec2 g_position;"
+"layout (location=1) in vec2 g_texCoord;"
+"out vec2 v_texCoord;"
+"void main()"
+"{"
+"    v_texCoord = g_texCoord;"
+"    gl_Position = vec4(g_position, 0.0, 1.0);"
+"}";
+
+static const char g_blitFragmentShader[] =
+"#version 410 core\n"
+"in vec2 v_texCoord;"
+"layout (location=0) out vec4 o_color;"
+"uniform sampler2D u_texture;"
+"void main()"
+"{"
+"    o_color = vec4(texture(u_texture, v_texCoord).rgb, 1.0);"
+"}";
+
+// Full-screen quad: x, y in clip space, then u, v (v = 0 is the top row)
+static const GLfloat g_blitQuad[] =
+{
+    -1.f,  1.f, 0.f, 0.f,
+     1.f,  1.f, 1.f, 0.f,
+    -1.f, -1.f, 0.f, 1.f,
+     1.f,  1.f, 1.f, 0.f,
+     1.f, -1.f, 1.f, 1.f,
+    -1.f, -1.f, 0.f, 1.f,
+};
+
+static SDL_GLContext createContext(SDL_Window* window)
+{
+    // 4.1 core is the newest profile macOS offers; both renderers stick to it
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+    SDL_GLContext context = SDL_GL_CreateContext(window);
+    if (!context)
+    {
+        SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "No OpenGL 4.1 core context (%s), using the default one", SDL_GetError());
+        SDL_GL_ResetAttributes();
+        context = SDL_GL_CreateContext(window);
+    }
+    return context;
+}
+
 Renderer::Renderer(WinApplication* application, Window *window)
     :   m_application(application)
     ,   m_window(window)
-    ,   m_renderer(SDL_GL_CreateContext(m_window->m_window))
+    ,   m_renderer(createContext(m_window->m_window))
     ,   m_videoMemory(new MemMap(800*600*2*2)) // double buffer 16 bits 800x600
     ,   m_currentBuffer(0)
     ,   m_depth(16)
@@ -28,6 +80,7 @@ Renderer::Renderer(WinApplication* application, Window *window)
 {
     setCurrent();
     SDL_GL_SetSwapInterval(1);
+    loadGLFunctions();
     glDebugMessageCallback = (PFNGLDEBUGMESSAGECALLBACKPROC)SDL_GL_GetProcAddress("glDebugMessageCallback");
     if (glDebugMessageCallback)
     {
@@ -37,7 +90,18 @@ Renderer::Renderer(WinApplication* application, Window *window)
 
     glGenTextures(1, &m_texture);
     glBindTexture(GL_TEXTURE_2D, m_texture);
-    glEnable(GL_TEXTURE_2D);
+
+    m_program = createShaderProgram(g_blitVertexShader, g_blitFragmentShader);
+    glGenVertexArrays(1, &m_vertexArray);
+    glBindVertexArray(m_vertexArray);
+    glGenBuffers(1, &m_vertexBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(g_blitQuad), g_blitQuad, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(GLfloat), 0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(GLfloat), (const void*)(2*sizeof(GLfloat)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 
     clearCurrent();
 }
@@ -64,7 +128,7 @@ void Renderer::setVideoMode(x86::reg32 w, x86::reg32 h, x86::reg32 bpp)
     m_depth = bpp;
     setCurrent();
     glBindTexture(GL_TEXTURE_2D, m_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, nullptr);
     clearCurrent();
     //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8, nullptr);
 }
@@ -116,27 +180,15 @@ void Renderer::present()
 
     // Render the game texture into the aspect-ratio-correct viewport
     glViewport(vpX, vpY, vpW, vpH);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, m_width, m_height, 0, -1.0f, 1.0f);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-    glBegin(GL_TRIANGLES);
-        glTexCoord2f(0.f, 0.f);
-        glVertex3f(0.f, 0.f, 1.f);
-        glTexCoord2f(1.f, 0.f);
-        glVertex3f(GLfloat(m_width), 0.f, 1.f);
-        glTexCoord2f(0.f, 1.f);
-        glVertex3f(0.f, GLfloat(m_height), 1.f);
-
-        glTexCoord2f(1.f, 0.f);
-        glVertex3f(GLfloat(m_width), 0.f, 1.f);
-        glTexCoord2f(1.f, 1.f);
-        glVertex3f(GLfloat(m_width), GLfloat(m_height), 1.f);
-        glTexCoord2f(0.f, 1.f);
-        glVertex3f(0.f, GLfloat(m_height), 1.f);
-    glEnd();
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glUseProgram(m_program);
+    glBindVertexArray(m_vertexArray);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_texture);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+    glUseProgram(0);
     glFlush();
     SDL_GL_SwapWindow(m_window->m_window);
 }
@@ -149,7 +201,7 @@ void Renderer::update()
     if (m_depth == 16)
     {
         //MemMap::fillDebugGraph(&m_application->getMemory<x86::reg16>(getFrontBuffer()) + m_width*2);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, &m_application->getMemory<x86::reg16>(getFrontBuffer()));
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, &m_application->getMemory<x86::reg16>(getFrontBuffer()));
     }
     else
     {

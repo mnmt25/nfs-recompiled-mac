@@ -1,50 +1,15 @@
 #include <lib/gliderenderer.h>
 #include <lib/renderer.h>
 #include <lib/glidetmu.h>
+#include <lib/glfunctions.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
 
 namespace win32
 {
 
-static PFNGLBLENDFUNCSEPARATEPROC glBlendFuncSeparate;
-static PFNGLATTACHSHADERPROC glAttachShader;
-static PFNGLCOMPILESHADERPROC glCompileShader;
-static PFNGLCREATEPROGRAMPROC glCreateProgram;
-static PFNGLCREATESHADERPROC glCreateShader;
-static PFNGLGETSHADERIVPROC glGetShaderiv;
-static PFNGLGETPROGRAMIVPROC glGetProgramiv;
-static PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
-static PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
-static PFNGLLINKPROGRAMPROC glLinkProgram;
-static PFNGLSHADERSOURCEPROC glShaderSource;
-static PFNGLUSEPROGRAMPROC glUseProgram;
-static PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation;
-static PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
-static PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
-static PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
-static PFNGLBUFFERDATAPROC glBufferData;
-static PFNGLGENBUFFERSPROC glGenBuffers;
-static PFNGLBINDBUFFERPROC glBindBuffer;
-static PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
-static PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
-static PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
-static PFNGLUNIFORM1IPROC glUniform1i;
-static PFNGLACTIVETEXTUREPROC glActiveTexture;
-static PFNGLTEXSTORAGE2DPROC glTexStorage2D;
-static PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
-static PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers;
-static PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
-static PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
-static PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
-static PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers;
-static PFNGLDELETERENDERBUFFERSPROC glDeleteRenderbuffers;
-static PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
-static PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
-static PFNGLDRAWBUFFERSPROC glDrawBuffers;
-
 static const char g_glVertexShader[] = ""
-"#version 400\n"
+"#version 410 core\n"
 "in vec3 g_position;"
 "in vec4 g_color;"
 "in vec2 g_texCoord;"
@@ -65,7 +30,7 @@ static const char g_glVertexShader[] = ""
 "}";
 
 static const char g_glFragmentShader[] =
-"#version 400\n"
+"#version 410 core\n"
 "in vec3 v_texCoord;"
 "in vec4 v_color;"
 "flat in vec4 v_combine;"
@@ -75,8 +40,8 @@ static const char g_glFragmentShader[] =
 ""
 "vec4 getColor(vec2 coords)"
 "{"
-"    vec2 texCoords = (v_atlasInfo.pq + clamp(coords, 0, v_atlasInfo.t-1))/v_atlasInfo.s;"
-"    return texture2D(u_texture, texCoords);"
+"    vec2 texCoords = (v_atlasInfo.pq + clamp(coords, 0.0, v_atlasInfo.t-1.0))/v_atlasInfo.s;"
+"    return texture(u_texture, texCoords);"
 "}"
 "void main()"
 "{"
@@ -85,10 +50,10 @@ static const char g_glFragmentShader[] =
 "    vec2 tex2mod = mod(vec2(texelPos.x+0.25, texelPos.y-0.25), v_atlasInfo.t);"
 "    vec2 tex3mod = mod(vec2(texelPos.x-0.25, texelPos.y+0.25), v_atlasInfo.t);"
 "    vec2 tex4mod = mod(vec2(texelPos.x+0.25, texelPos.y+0.25), v_atlasInfo.t);"
-"    vec2 tex1clamp = clamp(vec2(texelPos.x-0.25, texelPos.y-0.25), 0, v_atlasInfo.t);"
-"    vec2 tex2clamp = clamp(vec2(texelPos.x+0.25, texelPos.y-0.25), 0, v_atlasInfo.t);"
-"    vec2 tex3clamp = clamp(vec2(texelPos.x-0.25, texelPos.y+0.25), 0, v_atlasInfo.t);"
-"    vec2 tex4clamp = clamp(vec2(texelPos.x+0.25, texelPos.y+0.25), 0, v_atlasInfo.t);"
+"    vec2 tex1clamp = clamp(vec2(texelPos.x-0.25, texelPos.y-0.25), 0.0, v_atlasInfo.t);"
+"    vec2 tex2clamp = clamp(vec2(texelPos.x+0.25, texelPos.y-0.25), 0.0, v_atlasInfo.t);"
+"    vec2 tex3clamp = clamp(vec2(texelPos.x-0.25, texelPos.y+0.25), 0.0, v_atlasInfo.t);"
+"    vec2 tex4clamp = clamp(vec2(texelPos.x+0.25, texelPos.y+0.25), 0.0, v_atlasInfo.t);"
 "    vec2 tex1 = mix(tex1clamp, tex1mod, v_combine.p);"
 "    vec2 tex2 = mix(tex2clamp, tex2mod, v_combine.p);"
 "    vec2 tex3 = mix(tex3clamp, tex3mod, v_combine.p);"
@@ -125,77 +90,6 @@ GlideRenderer::GlideRenderer(Renderer* renderer)
     m_tmus[0] = new GlideTMU(s_atlasSize);
     //m_tmus[1] = new GlideTMU(s_atlasSize);
     m_renderer->setCurrent();
-    glBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)SDL_GL_GetProcAddress("glBlendFuncSeparate");
-    NFS2_ASSERT(glBlendFuncSeparate);
-    glAttachShader = (PFNGLATTACHSHADERPROC)SDL_GL_GetProcAddress("glAttachShader");
-    NFS2_ASSERT(glAttachShader);
-    glCompileShader = (PFNGLCOMPILESHADERPROC)SDL_GL_GetProcAddress("glCompileShader");
-    NFS2_ASSERT(glCompileShader);
-    glCreateProgram = (PFNGLCREATEPROGRAMPROC)SDL_GL_GetProcAddress("glCreateProgram");
-    NFS2_ASSERT(glCreateProgram);
-    glCreateShader = (PFNGLCREATESHADERPROC)SDL_GL_GetProcAddress("glCreateShader");
-    NFS2_ASSERT(glCreateShader);
-    glGetProgramiv = (PFNGLGETPROGRAMIVPROC)SDL_GL_GetProcAddress("glGetProgramiv");
-    NFS2_ASSERT(glGetProgramiv);
-    glGetShaderiv = (PFNGLGETSHADERIVPROC)SDL_GL_GetProcAddress("glGetShaderiv");
-    NFS2_ASSERT(glGetShaderiv);
-    glGetProgramInfoLog = (PFNGLGETPROGRAMINFOLOGPROC)SDL_GL_GetProcAddress("glGetProgramInfoLog");
-    NFS2_ASSERT(glGetProgramInfoLog);
-    glGetShaderInfoLog = (PFNGLGETSHADERINFOLOGPROC)SDL_GL_GetProcAddress("glGetShaderInfoLog");
-    NFS2_ASSERT(glGetShaderInfoLog);
-    glLinkProgram = (PFNGLLINKPROGRAMPROC)SDL_GL_GetProcAddress("glLinkProgram");
-    NFS2_ASSERT(glLinkProgram);
-    glShaderSource = (PFNGLSHADERSOURCEPROC)SDL_GL_GetProcAddress("glShaderSource");
-    NFS2_ASSERT(glShaderSource);
-    glUseProgram = (PFNGLUSEPROGRAMPROC)SDL_GL_GetProcAddress("glUseProgram");
-    NFS2_ASSERT(glUseProgram);
-    glGetAttribLocation = (PFNGLGETATTRIBLOCATIONPROC)SDL_GL_GetProcAddress("glGetAttribLocation");
-    NFS2_ASSERT(glGetAttribLocation);
-    glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)SDL_GL_GetProcAddress("glVertexAttribPointer");
-    NFS2_ASSERT(glVertexAttribPointer);
-    glGenVertexArrays = (PFNGLGENVERTEXARRAYSPROC)SDL_GL_GetProcAddress("glGenVertexArrays");
-    NFS2_ASSERT(glGenVertexArrays);
-    glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)SDL_GL_GetProcAddress("glBindVertexArray");
-    NFS2_ASSERT(glBindVertexArray);
-    glGenBuffers = (PFNGLGENBUFFERSPROC)SDL_GL_GetProcAddress("glGenBuffers");
-    NFS2_ASSERT(glGenBuffers);
-    glBindBuffer = (PFNGLBINDBUFFERPROC)SDL_GL_GetProcAddress("glBindBuffer");
-    NFS2_ASSERT(glBindBuffer);
-    glBufferData = (PFNGLBUFFERDATAPROC)SDL_GL_GetProcAddress("glBufferData");
-    NFS2_ASSERT(glBufferData);
-    glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)SDL_GL_GetProcAddress("glEnableVertexAttribArray");
-    NFS2_ASSERT(glEnableVertexAttribArray);
-    glGetUniformLocation = (PFNGLGETUNIFORMLOCATIONPROC)SDL_GL_GetProcAddress("glGetUniformLocation");
-    NFS2_ASSERT(glGetUniformLocation);
-    glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)SDL_GL_GetProcAddress("glUniformMatrix4fv");
-    NFS2_ASSERT(glUniformMatrix4fv);
-    glUniform1i = (PFNGLUNIFORM1IPROC)SDL_GL_GetProcAddress("glUniform1i");
-    NFS2_ASSERT(glUniform1i);
-    glActiveTexture = (PFNGLACTIVETEXTUREPROC)SDL_GL_GetProcAddress("glActiveTexture");
-    NFS2_ASSERT(glActiveTexture);
-    glTexStorage2D = (PFNGLTEXSTORAGE2DPROC)SDL_GL_GetProcAddress("glTexStorage2D");
-    NFS2_ASSERT(glTexStorage2D);
-    glGenFramebuffers = (PFNGLGENFRAMEBUFFERSPROC)SDL_GL_GetProcAddress("glGenFramebuffers");
-    NFS2_ASSERT(glGenFramebuffers);
-    glDeleteFramebuffers = (PFNGLDELETEFRAMEBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteFramebuffers");
-    NFS2_ASSERT(glDeleteFramebuffers);
-    glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)SDL_GL_GetProcAddress("glBindFramebuffer");
-    NFS2_ASSERT(glBindFramebuffer);
-    glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)SDL_GL_GetProcAddress("glFramebufferTexture2D");
-    NFS2_ASSERT(glFramebufferTexture2D);
-    glFramebufferRenderbuffer = (PFNGLFRAMEBUFFERRENDERBUFFERPROC)SDL_GL_GetProcAddress("glFramebufferRenderbuffer");
-    NFS2_ASSERT(glFramebufferRenderbuffer);
-    glGenRenderbuffers = (PFNGLGENRENDERBUFFERSPROC)SDL_GL_GetProcAddress("glGenRenderbuffers");
-    NFS2_ASSERT(glGenRenderbuffers);
-    glDeleteRenderbuffers = (PFNGLDELETERENDERBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteRenderbuffers");
-    NFS2_ASSERT(glDeleteRenderbuffers);
-    glBindRenderbuffer = (PFNGLBINDRENDERBUFFERPROC)SDL_GL_GetProcAddress("glBindRenderbuffer");
-    NFS2_ASSERT(glBindRenderbuffer);
-    glRenderbufferStorage = (PFNGLRENDERBUFFERSTORAGEPROC)SDL_GL_GetProcAddress("glRenderbufferStorage");
-    NFS2_ASSERT(glRenderbufferStorage);
-    glDrawBuffers = (PFNGLDRAWBUFFERSPROC)SDL_GL_GetProcAddress("glDrawBuffers");
-    NFS2_ASSERT(glDrawBuffers);
-
     compileShaders();
     glGenTextures(1, &m_atlas);
     glBindTexture(GL_TEXTURE_2D, m_atlas);
@@ -203,7 +97,7 @@ GlideRenderer::GlideRenderer(Renderer* renderer)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, s_atlasSize, s_atlasSize);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, s_atlasSize, s_atlasSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glEnable(GL_BLEND);
@@ -237,69 +131,7 @@ GlideRenderer::~GlideRenderer()
 
 void GlideRenderer::compileShaders()
 {
-    GLuint vertexShader, fragmentShader;
-    const GLint vertexShaderLen = sizeof(g_glVertexShader) - 1;
-    const GLint fragmentShaderLen = sizeof(g_glFragmentShader) - 1;
-    const GLchar* vertexShaderSrc = g_glVertexShader;
-    const GLchar* fragmentShaderSrc = g_glFragmentShader;
-    GLint status = 0;
-
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSrc, &vertexShaderLen);
-    glCompileShader(vertexShader);
-
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &status);
-    if (!status)
-    {
-        GLint maxLen = 0;
-        GLsizei len = 0;
-        glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &maxLen);
-        if (maxLen > 1)
-        {
-            GLchar *log = (GLchar *)malloc(maxLen);
-            glGetShaderInfoLog(vertexShader, maxLen, &len, log);
-            SDL_LogError(SDL_LOG_CATEGORY_RENDER, "%s", log);
-            free(log);
-        }
-    }
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSrc, &fragmentShaderLen);
-    glCompileShader(fragmentShader);
-
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &status);
-    if (!status)
-    {
-        GLint maxLen = 0;
-        GLsizei len = 0;
-        glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &maxLen);
-        if (maxLen > 1)
-        {
-            GLchar *log = (GLchar *)malloc(maxLen);
-            glGetShaderInfoLog(fragmentShader, maxLen, &len, log);
-            SDL_LogError(SDL_LOG_CATEGORY_RENDER, "%s", log);
-            free(log);
-        }
-    }
-
-    m_shaderProgram = glCreateProgram();
-    glAttachShader(m_shaderProgram, vertexShader);
-    glAttachShader(m_shaderProgram, fragmentShader);
-    glLinkProgram(m_shaderProgram);
-
-    glGetProgramiv(m_shaderProgram, GL_LINK_STATUS, &status);
-    if (!status)
-    {
-        GLint maxLen = 0;
-        GLsizei len = 0;
-        glGetProgramiv(m_shaderProgram, GL_INFO_LOG_LENGTH, &maxLen);
-        if (maxLen > 1)
-        {
-            GLchar *log = (GLchar *)malloc(maxLen);
-            glGetProgramInfoLog(m_shaderProgram, maxLen, &len, log);
-            SDL_LogError(SDL_LOG_CATEGORY_RENDER, "%s", log);
-            free(log);
-        }
-    }
+    m_shaderProgram = createShaderProgram(g_glVertexShader, g_glFragmentShader);
     m_attributes[0] = glGetAttribLocation(m_shaderProgram, "g_position");
     m_attributes[1] = glGetAttribLocation(m_shaderProgram, "g_color");
     m_attributes[2] = glGetAttribLocation(m_shaderProgram, "g_texCoord");
@@ -348,16 +180,23 @@ void GlideRenderer::swap()
     {
         flush();
         glViewport(0, 0, m_renderer->m_width, m_renderer->m_height);
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glOrtho(0, m_renderer->m_width, 0, m_renderer->m_height, 0, -65536.0f);
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
+        // glOrtho(0, width, 0, height, 0, -65536), column-major
+        const float w = float(m_renderer->m_width);
+        const float h = float(m_renderer->m_height);
+        const float matrix[16] =
+        {
+            2.f / w, 0.f,     0.f,           0.f,
+            0.f,     2.f / h, 0.f,           0.f,
+            0.f,     0.f,     2.f / 65536.f, 0.f,
+            -1.f,    -1.f,    -1.f,          1.f
+        };
         glUseProgram(m_shaderProgram);
-        float matrix[16];
-        glGetFloatv(GL_PROJECTION_MATRIX, matrix);
         glUniformMatrix4fv(m_transform, 1, GL_FALSE, matrix);
+        // Renderer::present() disables blending and binds its own vertex array
+        glEnable(GL_BLEND);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_atlas);
+        glBindVertexArray(m_vertexArray);
         glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, sizeof(GlVertex)*m_vertexCount, m_vertices, GL_STREAM_DRAW);
         glVertexAttribPointer(m_attributes[0], 3, GL_FLOAT, GL_FALSE, sizeof(GlVertex), 0);
