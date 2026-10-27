@@ -1,5 +1,6 @@
 #include <SDL3/SDL_main.h>
 #include <lib/file.h>
+#include <lib/mainthread.h>
 #include <lib/registry.h>
 #include <nfs3hp.h>
 #include <string>
@@ -13,6 +14,11 @@ static std::string getExeDirectory(const char* argv0)
     if (pos != std::string::npos)
         return path.substr(0, pos + 1);
     return "./";
+}
+
+static void execute(void* app)
+{
+    static_cast<nfs3hp::Application*>(app)->execute();
 }
 
 int main(int argc, char* argv[])
@@ -45,7 +51,7 @@ int main(int argc, char* argv[])
         app.addRegistryKey(win32::HKEY_LOCAL_MACHINE, "SOFTWARE\\Electronic Arts\\Need For Speed III", "Triple Buffer", new win32::RegistryValue(x86::reg32(0)));
         //app.addRegistryKey(win32::HKEY_LOCAL_MACHINE, "SOFTWARE\\Electronic Arts\\Need For Speed III", "Hardware Acceleration", new win32::RegistryValue(x86::reg32(0)));
         app.addRegistryKey(win32::HKEY_LOCAL_MACHINE, "SOFTWARE\\Electronic Arts\\Need For Speed III", "Hardware Acceleration", new win32::RegistryValue(x86::reg32(1)));
-        app.execute();
+        win32::MainThread::run(&execute, &app);
     }
     SDL_Quit();
     return 0;

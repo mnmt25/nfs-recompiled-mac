@@ -40,7 +40,7 @@ Thread::Thread(WinApplication *app, x86::reg32 method, x86::reg32 parameter, x86
     :   m_refCount(new SDL_AtomicInt())
     ,   m_semaphore(SDL_CreateSemaphore((flags & 0x4) ? 0 : 1))
     ,   m_data(app, method, parameter, flags)
-    ,   m_thread(SDL_CreateThread(&run, "thread", this))
+    ,   m_thread(create(&run, "thread", this))
 {
     m_refCount->value = 1;
 }
@@ -86,6 +86,19 @@ void Thread::terminate()
 x86::reg32 Thread::threadId() const
 {
     return m_data.m_threadId;
+}
+
+SDL_Thread* Thread::create(SDL_ThreadFunction function, const char* name, void* data)
+{
+    // 8 MiB like the Linux default; macOS gives secondary threads 512 KiB
+    SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER, reinterpret_cast<void*>(function));
+    SDL_SetStringProperty(props, SDL_PROP_THREAD_CREATE_NAME_STRING, name);
+    SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_USERDATA_POINTER, data);
+    SDL_SetNumberProperty(props, SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER, 8 * 1024 * 1024);
+    SDL_Thread* thread = SDL_CreateThreadWithProperties(props);
+    SDL_DestroyProperties(props);
+    return thread;
 }
 
 void Thread::sleep(x86::reg32 milliseconds)

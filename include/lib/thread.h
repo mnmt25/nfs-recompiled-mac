@@ -26,6 +26,7 @@ public:
     x86::reg32 threadId() const;
     static void sleep(x86::reg32 milliseconds);
     static x86::reg32 currentThreadId();
+    static SDL_Thread* create(SDL_ThreadFunction function, const char* name, void* data);
 
 private:
     Thread(const Thread& other);
