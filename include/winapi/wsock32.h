@@ -5,6 +5,12 @@
 #include <winapi/types.h>
 #include <lib/winapp.h>
 
+// macOS defines these as macros in <sys/_endian.h>; they would clash with
+// the Win32 wrappers declared below.
+#undef htons
+#undef ntohs
+#undef htonl
+#undef ntohl
 
 namespace win32 { namespace wsock32
 {

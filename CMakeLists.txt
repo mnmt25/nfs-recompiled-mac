@@ -43,6 +43,14 @@ endif()
 find_package(SDL3 REQUIRED)
 find_package(OpenGL REQUIRED)
 
+# MMX code uses SSE2 intrinsics (_mm_*). On non-x86 hosts such as Apple
+# Silicon they come from SIMDe (header-only, `brew install simde`).
+if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|i[3-6]86|x86)$")
+    find_path(SIMDE_INCLUDE_DIR simde/x86/sse2.h REQUIRED)
+    message(STATUS "Non-x86 host – using SIMDe from ${SIMDE_INCLUDE_DIR}")
+    include_directories(SYSTEM ${SIMDE_INCLUDE_DIR})
+endif()
+
 # prefer modern imported targets if available
 if(TARGET SDL3::SDL3)
     set(SDL3_LIB_TARGET SDL3::SDL3)
@@ -89,6 +97,14 @@ if(WITH_PEDANTIC_FPU AND TARGET_WINDOWS)
     message(FATAL_ERROR
         "WITH_PEDANTIC_FPU is not supported on Windows: the x87 NASM helper "
         "relies on Linux-specific 80-bit long double ABI conventions.")
+endif()
+
+# The NASM helper is x86-64 ELF only; it cannot be built for macOS (Mach-O,
+# and on Apple Silicon there is no x87 at all).
+if(WITH_PEDANTIC_FPU AND APPLE)
+    message(FATAL_ERROR
+        "WITH_PEDANTIC_FPU is not supported on macOS: x87.asm is an elf64 "
+        "x86-64 object. Configure with -DWITH_PEDANTIC_FPU=OFF.")
 endif()
 
 if(WITH_PEDANTIC_FPU AND NOT TARGET_WINDOWS)

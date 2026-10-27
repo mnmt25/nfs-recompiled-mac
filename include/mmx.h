@@ -2,8 +2,15 @@
 #define MMX_H_
 
 #include <x86.h>
+#include <cstring>
 //#include <intrin.h>
-#include <immintrin.h>
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
+# include <immintrin.h>
+#else
+// Non-x86 hosts (e.g. Apple Silicon): SIMDe maps the _mm_* intrinsics to NEON
+# define SIMDE_ENABLE_NATIVE_ALIASES
+# include <simde/x86/sse2.h>
+#endif
 
 namespace x86
 {
