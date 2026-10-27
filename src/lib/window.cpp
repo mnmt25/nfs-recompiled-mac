@@ -1,5 +1,6 @@
 #include <lib/window.h>
 #include <lib/thread.h>
+#include <lib/mainthread.h>
 #include <SDL3/SDL.h>
 #include <cstring>
 
@@ -58,14 +59,34 @@ WindowClass::~WindowClass()
 {
 }
 
-Window::Window(const char *title, int /*x*/, int /*y*/, int w, int h)
-    :   m_window(SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE|SDL_WINDOW_OPENGL))
+struct WindowRequest
 {
-    if (!m_window)
+    const char* title;
+    int         w;
+    int         h;
+    SDL_Window* window;
+};
+
+static void createWindowOnMainThread(void* data)
+{
+    WindowRequest* request = static_cast<WindowRequest*>(data);
+    request->window = SDL_CreateWindow(request->title, request->w, request->h, SDL_WINDOW_RESIZABLE|SDL_WINDOW_OPENGL);
+    if (!request->window)
     {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Failed to create window: %s", SDL_GetError());
-        return;
     }
+}
+
+static SDL_Window* createWindow(const char* title, int w, int h)
+{
+    WindowRequest request = { title, w, h, nullptr };
+    MainThread::call(&createWindowOnMainThread, &request);
+    return request.window;
+}
+
+Window::Window(const char *title, int /*x*/, int /*y*/, int w, int h)
+    :   m_window(createWindow(title, w, h))
+{
 }
 
 Window::~Window()
@@ -82,7 +103,7 @@ x86::reg32 Window::getMessage(const x86::CPU& cpu, MSG* result, Window *window, 
     SDL_Event event;
     for (;;)
     {
-        if (SDL_WaitEvent(&event))
+        if (MainThread::waitEvent(&event))
         {
             if (cpu.terminate)
                 return 0;

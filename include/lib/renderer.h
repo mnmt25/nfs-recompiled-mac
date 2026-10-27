@@ -47,6 +47,9 @@ private:
     Window*         m_window;
     void*           m_renderer;
     unsigned int    m_texture;
+    unsigned int    m_program;
+    unsigned int    m_vertexArray;
+    unsigned int    m_vertexBuffer;
     MemMap*         m_videoMemory;
     x86::reg32      m_currentBuffer;
     x86::reg32      m_width;

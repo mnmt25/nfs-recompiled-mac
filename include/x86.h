@@ -8,9 +8,12 @@
 # define __restrict__ __restrict
 # define NFS2_ASSERT(x)         \
     if (! (x)) __debugbreak()
-#else
+#elif defined(__i386__) || defined(__x86_64__)
 # define NFS2_ASSERT(x)         \
     if (! (x)) asm("int3")
+#else
+# define NFS2_ASSERT(x)         \
+    if (! (x)) __builtin_trap()
 #endif
 #define NFS2_USE(x)             \
     (void)x

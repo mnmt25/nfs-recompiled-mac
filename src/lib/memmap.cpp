@@ -9,6 +9,13 @@
 #include <lib/mutex.h>
 #include <cstdlib>
 
+// The guard-page scheme below works on 4 KiB host pages. Apple Silicon uses
+// 16 KiB pages, so there everything is mapped read/write up front, the same
+// way the Windows path does it.
+#if defined(__APPLE__) && defined(__aarch64__)
+# define NFS_MEMMAP_NO_PROTECT
+#endif
+
 namespace win32
 {
 
@@ -29,7 +36,12 @@ static void* alloc(x86::reg32 size)
 #ifdef _WIN32
     return VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 #else
-    void* p = mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+# ifdef NFS_MEMMAP_NO_PROTECT
+    const int prot = PROT_READ | PROT_WRITE;
+# else
+    const int prot = PROT_NONE;
+# endif
+    void* p = mmap(nullptr, size, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     NFS2_ASSERT(p != MAP_FAILED);
     return p;
 #endif
@@ -47,7 +59,7 @@ static void dealloc(void* mem, x86::reg32 size)
 
 static void protect(void* mem, x86::reg32 size, bool read, bool write)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(NFS_MEMMAP_NO_PROTECT)
     NFS2_USE(mem);
     NFS2_USE(size);
     NFS2_USE(read);
