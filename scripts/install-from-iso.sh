@@ -211,5 +211,5 @@ else
     die "unrecognised CD: no NFS2SEN.EXE in $cd_dir"
 fi
 
-echo "Done. Run the game with:"
-echo "  ./build/$game \"$destination\""
+echo "Done. To run the game from a terminal:"
+echo "  \"$(find_binary "$game" || echo "build/$game")\" \"$destination\""
